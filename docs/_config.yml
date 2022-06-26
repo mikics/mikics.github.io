@@ -30,7 +30,7 @@ twitter_username: jekyllrb
 github_username:  jekyll
 
 # Build settings
-remote_theme: StartBootstrap/startbootstrap-clean-blog-jekyll 
+theme: jekyll-theme-clean-blog
 plugins:
   - jekyll-feed
 
