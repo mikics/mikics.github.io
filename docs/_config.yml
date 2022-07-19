@@ -18,12 +18,11 @@
 # You can create any custom variable you would like, and they will be accessible
 # in the templates via {{ site.myvariable }}.
 
-title: Michele Castriotta
+title: GSoC 2022 - Expanding FEniCSx electromagnetic demos
+author: Michele Castriotta
 email: michele.castriotta@iit.it
 description: >- # this means to ignore newlines until "baseurl:"
-  Write an awesome description for your new site here. You can edit this
-  line in _config.yml. It will appear in your document head meta (for
-  Google search results) and in your feed.xml site description.
+  Michele Castriotta
 # baseurl: "" # the subpath of your site, e.g. /blog
 domain: mikics.github.io  
 url: https://mikics.github.io/ # the base hostname & protocol for your site, e.g. http://example.com
@@ -31,9 +30,15 @@ twitter_username: castrimik
 github_username: mikics
 
 # Build settings
-remote_theme: StartBootstrap/startbootstrap-clean-blog-jekyll
+remote_theme: mikics/startbootstrap-clean-blog-jekyll
 plugins:
   - jekyll-feed
+markdown: kramdown
+highlighter: rouge
+kramdown:
+  input: GFM
+  math_engine: mathjax
+  syntax_highlighter: rouge
 
 # Exclude from processing.
 # The following items will not be processed, by default.
