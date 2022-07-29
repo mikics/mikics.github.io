@@ -7,24 +7,24 @@ background: '../gsoc-logo.png'
 usemathjax: true
 ---
 
-During the first month of my GSoC 2022 project, I have developed a
+During the first weeks as a GSoC 2022 contributor for FEniCS, I have developed a
 demo showing how to implement scattering boundary conditions in FEniCSx.
 In particular, I have used scattering boundary conditions for simulating the scattering
 of a TM-polarized plane wave by an infinite gold wire.
 
 # Scattering from a wire with scattering boundary conditions
-This demo is implemented in two files: one for the mesh
-generation with gmsh, and one for the variational forms
-and the solver. It illustrates how to:
+This demo is implemented in three files: one for the mesh
+generation with gmsh, one for the calculation of analytical results,
+and one for the variational forms and the solver. The demo illustrates how to:
 
 - Use complex quantities in FEniCSx
 - Setup and solve Maxwell's equations
-- Implement Scattering Boundary Conditions
+- Implement scattering boundary conditions
+- Calculate analytical and numerical efficiencies for scattering problems
 
 ## Equations, problem definition and implementation
 
 First of all, let's import the modules that will be used:
-
 
 ```python
 import gmsh
@@ -54,18 +54,17 @@ if not np.issubdtype(PETSc.ScalarType, np.complexfloating):
 ```
 
 Now, let's consider an infinite metallic wire immersed in
-a background medium (e.g. vacuum or water). Let's now
-consider the plane cutting the wire perpendicularly to
-its axis at a generic point. Such plane $\Omega=\Omega_{m}
-\cup\Omega_{b}$ is formed by the cross-section
+a background medium (e.g. vacuum or water) that is hit by an electromagnetic
+wave with its wavevector and electric field polarization perpendicular to the
+wire axis. Due to the degeneracy of the problem along the axis direction, we
+can solve a 2D problem, with our domain being $\Omega=\Omega_{m}
+\cup\Omega_{b}$, made up by the cross-section
 of the wire $\Omega_m$ and the background medium
-$\Omega_{b}$ surrounding the wire. Let's consider
-just the portion of this plane delimited by an external
-circular boundary $\partial \Omega$. We want to calculate
-the electric field $\mathbf{E}_s$ scattered by the wire
-when a background wave $\mathbf{E}_b$ impinges on it.
-We will consider a background plane wave at $\lambda_0$
-wavelength, that can be written analytically as:
+$\Omega_{b}$ surrounding the wire. We will delimit our domain with external
+circular boundary $\partial \Omega$. Our aim is to calculate
+the electric field $\mathbf{E}_s$ scattered by the wire.
+We will consider a background plane wave with a wavelength $\lambda_0$.
+Mathematically, we can write:
 
 $$
 \mathbf{E}_b = \exp(\mathbf{k}\cdot\mathbf{r})\hat{\mathbf{u}}_p
@@ -150,7 +149,7 @@ wire. As reference values, we will consider $\lambda_0 = 400\textrm{nm}$
 and $\varepsilon_m = -1.0782 + 5.8089\textrm{j}$ (relative permittivity of
 gold at $400\textrm{nm}$).
 
-To make the system determined, we need to add some boundary conditions
+To make the system fully determined, we need to add some boundary conditions
 on $\partial \Omega$. A common approach is the use of scattering
 boundary conditions, which make the boundary transparent for
 $\mathbf{E}_s$, allowing us to restric the computational boundary
@@ -240,7 +239,9 @@ gmsh.finalize()
 MPI.COMM_WORLD.barrier()
 ```
 
-Let's have a visual check of the mesh by plotting it with PyVista:
+Let's have a visual check of the mesh by plotting it with PyVista, by usin
+different colors for cells with different tags: blue for the wire (`au_tag`)
+and yellow for the background medium (`bkg_tag`).
 
 
 ```python
@@ -248,6 +249,9 @@ topology, cell_types, geometry = plot.create_vtk_mesh(mesh, 2)
 grid = pyvista.UnstructuredGrid(topology, cell_types, geometry)
 pyvista.set_jupyter_backend("pythreejs")
 plotter = pyvista.Plotter()
+num_local_cells = mesh.topology.index_map(mesh.topology.dim).size_local
+grid.cell_data["Marker"] = cell_tags.values[cell_tags.indices<num_local_cells]
+grid.set_active_scalars("Marker")
 plotter.add_mesh(grid, show_edges=True)
 plotter.view_xy()
 if not pyvista.OFF_SCREEN:
@@ -256,6 +260,10 @@ else:
     pyvista.start_xvfb()
     figure = plotter.screenshot("wire_mesh.png")
 ```
+The result is:
+
+<img src="../../../images/wire_mesh_sbc.png" width="100%" />
+
 
 Now we define some other problem specific parameters:
 
@@ -279,37 +287,26 @@ degree = 3
 curl_el = ufl.FiniteElement("N1curl", mesh.ufl_cell(), degree)
 V = fem.FunctionSpace(mesh, curl_el)
 ```
+
 Next, we can interpolate $\mathbf{E}_b$ into the function space $V$:
 
 ```python
 f = background_electric_field(theta, n_bkg, k0)
 Eb = fem.Function(V)
 Eb.interpolate(f.eval)
-```
 
-
-```python
 # Function r = radial distance from the (0, 0) point
 x = ufl.SpatialCoordinate(mesh)
 r = radial_distance(x)
-```
 
-
-```python
 # Definition of Trial and Test functions
 Es = ufl.TrialFunction(V)
 v = ufl.TestFunction(V)
-```
 
-
-```python
 # Definition of 3d fields for cross and curl operations
 Es_3d = as_vector((Es[0], Es[1], 0))
 v_3d = as_vector((v[0], v[1], 0))
-```
 
-
-```python
 # Measures for subdomains
 dx = ufl.Measure("dx", mesh, subdomain_data=cell_tags)
 ds = ufl.Measure("ds", mesh, subdomain_data=facet_tags)
@@ -317,10 +314,7 @@ dAu = dx(au_tag)
 dBkg = dx(bkg_tag)
 dDom = dAu + dBkg
 dsbc = ds(boundary_tag)
-```
 
-
-```python
 # Normal to the boundary
 n = FacetNormal(mesh)
 n_3d = as_vector((n[0], n[1], 0))
@@ -333,9 +327,7 @@ the relative permittivity $\varepsilon_m$ of the gold wire at $400nm$ (data take
 
 ```python
 # Definition of relative permittivity for Au @400nm
-reps_au = -1.0782
-ieps_au = 5.8089
-eps_au = reps_au + ieps_au * 1j
+eps_au = -1.0782 + 1j * 5.8089
 ```
 
 We want to define a space function for the permittivity $\varepsilon$ that takes the value of
@@ -350,7 +342,7 @@ eps = fem.Function(D)
 au_cells = cell_tags.find(au_tag)
 bkg_cells = cell_tags.find(bkg_tag)
 eps.x.array[au_cells] = np.full_like(
-    au_cells, reps_au + ieps_au * 1j, dtype=np.complex128)
+    au_cells, eps_au, dtype=np.complex128)
 eps.x.array[bkg_cells] = np.full_like(bkg_cells, eps_bkg, dtype=np.complex128)
 eps.x.scatter_forward()
 ```
@@ -449,16 +441,42 @@ problem = fem.petsc.LinearProblem(a, L, bcs=[], petsc_options={
 Eh = problem.solve()
 ```
 
-Next we can calculate the total electric field $\mathbf{E}=\mathbf{E}_s+\mathbf{E}_b$:
-
+Let's now save the solution. To do so,
+we need to interpolate our solution discretized with Nedelec elements
+into a discontinuous Lagrange space, and then we can save the interpolated
+function as a `.bp` folder:
 
 ```python
-# Total electric field E = Es + Eb
-E = fem.Function(V)
-E.x.array[:] = Eb.x.array[:] + Eh.x.array[:]
+V_dg = fem.VectorFunctionSpace(mesh, ("DG", 3))
+Esh_dg = fem.Function(V_dg)
+Esh_dg.interpolate(Esh)
+
+with VTXWriter(mesh.comm, "Esh.bp", Esh_dg) as f:
+    f.write(0.0)
 ```
 
-Often it is useful to calculate the norm of the electric field:
+Next we can calculate the total electric field 
+$\mathbf{E}=\mathbf{E}_s+\mathbf{E}_b$ and save it:
+
+```python
+E = fem.Function(V)
+E.x.array[:] = Eb.x.array[:] + Esh.x.array[:]
+
+E_dg = fem.Function(V_dg)
+E_dg.interpolate(E)
+
+with VTXWriter(mesh.comm, "E.bp", E_dg) as f:
+    f.write(0.0)
+```
+
+For more information about saving and visualizing vector fields
+discretized with Nedelec elements, check [this](
+https://docs.fenicsproject.org/dolfinx/main/python/demos/demo_interpolation-io.html)
+DOLFINx demo.
+
+<img src="../../../images/animation.gif" width="100%" />
+
+Often it is useful to express the electric field as its norm:
 
 $$
 ||\mathbf{E}_s|| = \sqrt{\mathbf{E}_s\cdot\bar{\mathbf{E}}_s}
@@ -466,17 +484,15 @@ $$
 
 which in DOLFINx can be retrieved in this way:
 
-
 ```python
 # ||E||
 lagr_el = ufl.FiniteElement("CG", mesh.ufl_cell(), 2)
-norm_func = sqrt(inner(Eh, Eh))
-V_normEh = fem.FunctionSpace(mesh, lagr_el)
-norm_expr = fem.Expression(norm_func, V_normEh.element.interpolation_points)
-normEh = fem.Function(V_normEh)
-normEh.interpolate(norm_expr)
+norm_func = sqrt(inner(Esh, Esh))
+V_normEsh = fem.FunctionSpace(mesh, lagr_el)
+norm_expr = fem.Expression(norm_func, V_normEsh.element.interpolation_points())
+normEsh = fem.Function(V_normEsh)
+normEsh.interpolate(norm_expr)
 ```
-
 To validate our demo, we can compare our numerical results with analytical results.
 In particular, as reference quantities, we can consider the so-called absorption and scattering efficiencies.
 The analytical formula for these quantities can be found in:
@@ -542,7 +558,7 @@ We also define a nested function for the calculation of $a_l$. For the
 final calculation of the efficiencies, the summation over the different
 orders of the Bessel functions is truncated at $\nu=50$.
 
-```
+```python
 def calculate_analytical_efficiencies(reps, ieps, n_bkg, wl0, radius_wire):
 
     def a_coeff(nu, m, alpha):
@@ -584,28 +600,63 @@ def calculate_analytical_efficiencies(reps, ieps, n_bkg, wl0, radius_wire):
     return q_abs, q_sca, q_ext
 ```
 
-And then we can calculate them:
+Let's do the calculation:
 
 ```python
-# Calculation of analytical efficiencies
 q_abs_analyt, q_sca_analyt, q_ext_analyt = calculate_analytical_efficiencies(
-    reps_au,
-    ieps_au,
+    eps_au,
     n_bkg,
     wl0,
     radius_wire)
 ```
 
-Then, we can calculate our numerical efficiencies with the following code:
+Now we can calculate the numerical efficiencies from our solution.
+The formula for the absorption, scattering and extinction are:
+
+$$
+\begin{align}
+& Q_{abs} = \operatorname{Re}\left(\int_{\Omega_{m}} \frac{1}{2}
+  \frac{\operatorname{Im}(\varepsilon_m)k_0}{Z_0n_b}
+  \mathbf{E}\cdot\hat{\mathbf{E}}dx\right) \\
+& Q_{sca} = \operatorname{Re}\left(\int_{\partial\Omega} \frac{1}{2}
+  \left(\mathbf{E}_s\times\bar{\mathbf{H}}_s\right)
+  \cdot\mathbf{n}ds\right)\\
+& Q_{ext} = Q_{abs} + Q_{sca}
+\end{align}
+$$
+
+with $Z_0 = \sqrt{\frac{\mu_0}{\varepsilon_0}}$ being the
+vacuum impedance, and with
+
+$$
+\mathbf{H}_s = -j\frac{1}{Z_0k_0n_b}\nabla\times\mathbf{E}_s
+$$
+
+being
+the scattered magnetic field.
+We can then normalize these values over the intensity of
+the electromagnetic field $I_0$ and the geometrical cross
+section of the wire,
+$\sigma_{gcs} = 2r_w$:
+
+$$
+\begin{align}
+& q_{abs} = \frac{Q_{abs}}{I_0\sigma_{gcs}} \\
+& q_{sca} = \frac{Q_{sca}}{I_0\sigma_{gcs}} \\
+& q_{ext} = q_{abs} + q_{sca}, \\
+\end{align}
+$$
+
+In FEniCSx, we can calculate these values in the following way:
 
 ```python
 # Vacuum impedance
 Z0 = np.sqrt(mu_0 / epsilon_0)
 
 # Magnetic field H
-Hh_3d = -1j * curl_2d(Eh) / Z0 / k0 / n_bkg
+Hsh_3d = -1j * curl_2d(Esh) / Z0 / k0 / n_bkg
 
-Eh_3d = as_vector((Eh[0], Eh[1], 0))
+Esh_3d = as_vector((Esh[0], Esh[1], 0))
 E_3d = as_vector((E[0], E[1], 0))
 
 # Intensity of the electromagnetic fields I0 = 0.5*E0**2/Z0
@@ -616,33 +667,52 @@ I0 = 0.5 / Z0
 gcs = 2 * radius_wire
 
 # Quantities for the calculation of efficiencies
-P = 0.5 * inner(cross(Eh_3d, conj(Hh_3d)), n_3d)
-Q = 0.5 * ieps_au * k0 * (inner(E_3d, E_3d)) / Z0 / n_bkg
+P = 0.5 * inner(cross(Esh_3d, conj(Hsh_3d)), n_3d)
+Q = 0.5 * np.imag(eps_au) * k0 * (inner(E_3d, E_3d)) / Z0 / n_bkg
 
+# Define integration domain for the wire
+dAu = dx(au_tag)
+
+# Normalized absorption efficiency
 q_abs_fenics_proc = (fem.assemble_scalar(fem.form(Q * dAu)) / gcs / I0).real
+# Sum results from all MPI processes
 q_abs_fenics = mesh.comm.allreduce(q_abs_fenics_proc, op=MPI.SUM)
 
+# Normalized scattering efficiency
 q_sca_fenics_proc = (fem.assemble_scalar(fem.form(P * dsbc)) / gcs / I0).real
+
+# Sum results from all MPI processes
 q_sca_fenics = mesh.comm.allreduce(q_sca_fenics_proc, op=MPI.SUM)
 
+# Extinction efficiency
 q_ext_fenics = q_abs_fenics + q_sca_fenics
+```
+Finally, we can evaluate the error:
 
-err_abs = np.abs(q_abs_analyt - q_abs_fenics) / q_abs_analyt * 100
-err_sca = np.abs(q_sca_analyt - q_sca_fenics) / q_sca_analyt * 100
-err_ext = np.abs(q_ext_analyt - q_ext_fenics) / q_ext_analyt * 100
+```python
+# Error calculation
+err_abs = np.abs(q_abs_analyt - q_abs_fenics) / q_abs_analyt
+err_sca = np.abs(q_sca_analyt - q_sca_fenics) / q_sca_analyt
+err_ext = np.abs(q_ext_analyt - q_ext_fenics) / q_ext_analyt
+
+# Check if errors are smaller than 1%
+assert err_abs < 0.01
+assert err_sca < 0.01
+assert err_ext < 0.01
 
 if MPI.COMM_WORLD.rank == 0:
 
     print()
     print(f"The analytical absorption efficiency is {q_abs_analyt}")
     print(f"The numerical absorption efficiency is {q_abs_fenics}")
-    print(f"The error is {err_abs}%")
+    print(f"The error is {err_abs*100}%")
     print()
     print(f"The analytical scattering efficiency is {q_sca_analyt}")
     print(f"The numerical scattering efficiency is {q_sca_fenics}")
-    print(f"The error is {err_sca}%")
+    print(f"The error is {err_sca*100}%")
     print()
     print(f"The analytical extinction efficiency is {q_ext_analyt}")
     print(f"The numerical extinction efficiency is {q_ext_fenics}")
-    print(f"The error is {err_ext}%")
+    print(f"The error is {err_ext*100}%")
 ```
+

@@ -33,7 +33,7 @@ github_username: mikics
 remote_theme: mikics/startbootstrap-clean-blog-jekyll
 plugins:
   - jekyll-feed
-markdown: kramdown
+markdown: redcarpet
 highlighter: rouge
 kramdown:
   input: GFM
