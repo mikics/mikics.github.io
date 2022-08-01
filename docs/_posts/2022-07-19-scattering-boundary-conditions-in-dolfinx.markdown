@@ -55,12 +55,12 @@ if not np.issubdtype(PETSc.ScalarType, np.complexfloating):
 
 Now, let's consider an infinite metallic wire immersed in
 a background medium (e.g. vacuum or water) that is hit by an electromagnetic
-wave with its wavevector and electric field polarization perpendicular to the
+wave with its wavevector and electric field perpendicular to the
 wire axis. Due to the degeneracy of the problem along the axis direction, we
-can solve a 2D problem, with our domain being $\Omega=\Omega_{m}
+can solve the problem in two-dimension, with our domain being $\Omega=\Omega_{m}
 \cup\Omega_{b}$, made up by the cross-section
 of the wire $\Omega_m$ and the background medium
-$\Omega_{b}$ surrounding the wire. We will delimit our domain with external
+$\Omega_{b}$ surrounding the wire. We will delimit our domain with an external
 circular boundary $\partial \Omega$. Our aim is to calculate
 the electric field $\mathbf{E}_s$ scattered by the wire.
 We will consider a background plane wave with a wavelength $\lambda_0$.
@@ -239,7 +239,7 @@ gmsh.finalize()
 MPI.COMM_WORLD.barrier()
 ```
 
-Let's have a visual check of the mesh by plotting it with PyVista, by usin
+Let's have a visual check of the mesh by plotting it with PyVista, by using
 different colors for cells with different tags: blue for the wire (`au_tag`)
 and yellow for the background medium (`bkg_tag`).
 
@@ -320,7 +320,7 @@ n = FacetNormal(mesh)
 n_3d = as_vector((n[0], n[1], 0))
 ```
 
-Now it is the turn of the permittivity $\varepsilon$. First of all let's define
+Let's now define
 the relative permittivity $\varepsilon_m$ of the gold wire at $400nm$ (data taken from
 [*Olmon et al. 2012*](https://doi.org/10.1103/PhysRevB.86.235147)):
 
@@ -330,9 +330,9 @@ the relative permittivity $\varepsilon_m$ of the gold wire at $400nm$ (data take
 eps_au = -1.0782 + 1j * 5.8089
 ```
 
-We want to define a space function for the permittivity $\varepsilon$ that takes the value of
+Now we can define a space function for the permittivity $\varepsilon$ that takes the value of
 the gold permittivity $\varepsilon_m$ for cells inside the wire, while it takes the value of the
-background permittivity otherwise:
+background permittivity $\varepsilon_b$ otherwise:
 
 
 ```python
@@ -347,7 +347,7 @@ eps.x.array[bkg_cells] = np.full_like(bkg_cells, eps_bkg, dtype=np.complex128)
 eps.x.scatter_forward()
 ```
 
-It is time to solve our problem, and therefore we need to find the weak form of the Maxwell's equation plus the scattering boundary conditions. First of all,
+It is time to solve our problem, and therefore we need to find the weak form of the Maxwell's equation plus with the scattering boundary conditions. As a first step,
 we need to take the inner products of the equations with a
 complex test function $\mathbf{v}$, and then we need to integrate
 the terms over the corresponding domains:
@@ -472,17 +472,18 @@ with VTXWriter(mesh.comm, "E.bp", E_dg) as f:
 For more information about saving and visualizing vector fields
 discretized with Nedelec elements, check [this](
 https://docs.fenicsproject.org/dolfinx/main/python/demos/demo_interpolation-io.html)
-DOLFINx demo.
+DOLFINx demo. Instead of PyVista, we can also use ParaView for visualization and post-processing purposes.
+Here below an example of the time-harmonic evolution of $\operatorname{Re}(\mathbf{E})$ along $x$ obtained in ParaView (the field of view has been reduced for convenience):
 
 <img src="../../../images/animation.gif" width="100%" />
 
-Often it is useful to express the electric field as its norm:
+If we are intereste in the norm of the electric field:
 
 $$
-||\mathbf{E}_s|| = \sqrt{\mathbf{E}_s\cdot\bar{\mathbf{E}}_s}
+||\mathbf{E}_s|| = \sqrt{\mathbf{E}_s\cdot\bar{\mathbf{E}}_s},
 $$
 
-which in DOLFINx can be retrieved in this way:
+we can calculate it in DOLFINx in this way:
 
 ```python
 # ||E||
@@ -495,18 +496,15 @@ normEsh.interpolate(norm_expr)
 ```
 To validate our demo, we can compare our numerical results with analytical results.
 In particular, as reference quantities, we can consider the so-called absorption and scattering efficiencies.
-The analytical formula for these quantities can be found in:
+The analytical derivation of these quantities can be found at [this](https://doi.org/10.1016/B978-0-12-404550-7.50012-9) reference. Here we will report the final result.
 
-Milton Kerker, "The Scattering of Light and Other Electromagnetic
-Radiation", Chapter 6, Elsevier, 1969.
-
-Let's define some parameters for the problem:
+First of all, let's define some parameters:
 
 - $m = n/n_b$: relative refractive index of the wire,
 - $r$: radius of the cross-section of the wire,
 - $\alpha = 2\pi r n_b/\lambda_0$.
 
-Now, let's define the scattering coefficients $a_l$ as:
+Now, let's introduce the coefficients $a_l$ as:
 
 $$
 \begin{equation}
@@ -532,8 +530,8 @@ We have already imported these functions from `scipy.special`:
 - `hankel2(nu, x)` ⟷ $H_\nu^{(2)}(x)$,
 - `h2vp(nu, x, 1)` ⟷ $H_\nu^{(2){\prime}}(x)$.
 
-We can now calculate the scattering, extinction and absorption
-efficiencies as:
+The scattering, extinction and absorption
+efficiencies can be calculated as:
 
 $$
 \begin{align}
@@ -545,18 +543,13 @@ $$
 \end{align}
 $$
 
-Next, we define a function for calculating the analytical efficiencies
-in Python. The inputs of the function are:
+We can calculate these formula in Python with the below `calculate_analytical_efficiencies` function, having the following inputs:
 
 - `reps` ⟷ $\operatorname{Re}(\varepsilon)$,
 - `ieps` ⟷ $\operatorname{Im}(\varepsilon)$,
 - `n_bkg` ⟷ $n_b$,
 - `wl0` ⟷ $\lambda_0$,
 - `radius_wire` ⟷ $r$.
-
-We also define a nested function for the calculation of $a_l$. For the
-final calculation of the efficiencies, the summation over the different
-orders of the Bessel functions is truncated at $\nu=50$.
 
 ```python
 def calculate_analytical_efficiencies(reps, ieps, n_bkg, wl0, radius_wire):
@@ -600,7 +593,7 @@ def calculate_analytical_efficiencies(reps, ieps, n_bkg, wl0, radius_wire):
     return q_abs, q_sca, q_ext
 ```
 
-Let's do the calculation:
+Let's run the function with our inputs:
 
 ```python
 q_abs_analyt, q_sca_analyt, q_ext_analyt = calculate_analytical_efficiencies(
@@ -610,8 +603,7 @@ q_abs_analyt, q_sca_analyt, q_ext_analyt = calculate_analytical_efficiencies(
     radius_wire)
 ```
 
-Now we can calculate the numerical efficiencies from our solution.
-The formula for the absorption, scattering and extinction are:
+Now we can calculate the numerical efficiencies with the following formula:
 
 $$
 \begin{align}
@@ -687,7 +679,7 @@ q_sca_fenics = mesh.comm.allreduce(q_sca_fenics_proc, op=MPI.SUM)
 # Extinction efficiency
 q_ext_fenics = q_abs_fenics + q_sca_fenics
 ```
-Finally, we can evaluate the error:
+Finally, we can evaluate the error, to validate our simulation:
 
 ```python
 # Error calculation
