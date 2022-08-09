@@ -3,7 +3,7 @@ layout: post
 title:  "Scattering boundary conditions in DOLFINx"
 subtitle: "TM-polarized plane wave scattered by an infinite gold wire"
 date: 2022-07-19 15:42:00 +0200
-background: '../gsoc-logo.png'
+background: '../../../images/gsoc-logo.png'
 usemathjax: true
 ---
 
