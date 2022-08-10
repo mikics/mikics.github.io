@@ -504,11 +504,11 @@ with VTXWriter(domain.comm, "Esh.bp", Esh_dg) as f:
     f.write(0.0)
 ```
 
-For a quick visualization we can use PyVista, as done for the mesh.
-For more information about saving and visualizing vector fields
-discretized with Nedelec elements, check [this](
-https://docs.fenicsproject.org/dolfinx/main/python/demos/demo_interpolation-io.html)
-DOLFINx demo.
+For a quick visualization we can use PyVista, as done for the mesh, or Paraview.
+As an example, here below we show the time-harmonic evolution of the `Esh_dg`
+magnitude obtained by processing the data in Paraview.
+
+<img src="../../../images/animation_pml.gif" width="100%" />
 
 ```python
 if have_pyvista:

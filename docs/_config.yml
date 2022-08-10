@@ -33,12 +33,16 @@ github_username: mikics
 remote_theme: mikics/startbootstrap-clean-blog-jekyll
 plugins:
   - jekyll-feed
+  - jekyll-paginate
+  - jekyll-sitemap
 markdown: redcarpet
 highlighter: rouge
 kramdown:
   input: GFM
   math_engine: mathjax
   syntax_highlighter: rouge
+paginate:           5
+paginate_path:      "/posts/page:num/"
 
 # Exclude from processing.
 # The following items will not be processed, by default.
