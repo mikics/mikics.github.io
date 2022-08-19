@@ -17,7 +17,7 @@ and one for the variational forms and the solver. It illustrates how to:
 
 - Use complex quantities in FEniCSx
 - Setup and solve Maxwell's equations
-- Implement (rectangular) perfectly matched layers
+- Implement perfectly matched layers
 
 ## Equations, problem definition and implementation
 
@@ -68,13 +68,11 @@ if not np.issubdtype(PETSc.ScalarType, np.complexfloating):
 ```
 
 Now, let's consider an infinite metallic wire immersed in
-a background medium (e.g. vacuum or water). Let's now
-consider the plane cutting the wire perpendicularly to
-its axis at a generic point. Such plane $\Omega=\Omega_{m}
+a background medium (e.g. vacuum or water). Our corresponding 2D domain $\Omega=\Omega_{m}
 \cup\Omega_{b}\cup\Omega_{pml}$ is formed by the cross-section
 of the wire $\Omega_m$, the background medium
 $\Omega_{b}$ surrounding the wire, and a squared perfectly
-matched layer (PML) surrounding the domains. PMLs are
+matched layer $\Omega_{pml}$ surrounding the domains. Perfectly matched layers (or shortly PMLs) are
 reflectionless layers that gradually absorb waves impinging
 on them, therefore allowing us to truncate the domain size.
 We want to calculate the electric field $\mathbf{E}_s$
@@ -114,8 +112,6 @@ The function `background_field` below implements this analytical
 formula:
 
 ```python
-
-
 def background_field(theta, n_b, k0, x):
 
     kx = n_b * k0 * np.cos(theta)
@@ -133,8 +129,6 @@ Let's now define the $\nabla\times$ operator for 2d vector, since
 we will use it later:
 
 ```python
-
-
 def curl_2d(a):
 
     return as_vector((0, 0, a[1].dx(0) - a[0].dx(1)))
@@ -142,29 +136,28 @@ def curl_2d(a):
 ```
 
 As said before, we are going to implement a perfectly matched layer (PML)
-for this problem. What a PML does is to gradually absorb waves impinging
-them. Mathematically, this effect can be embedded by using a complex
-coordinate system of this kind:
+for this problem. Mathematically, the gradual absorption by the PML in our domain can be embedded by using a complex
+coordinate transformation of this kind:
 
 $$
 \begin{align}
-& x^\prime= x\left\{1-j\frac{\alpha}{k_0}\left[\frac{|x|-l_{dom}/2}
+& \rho^\prime= \rho\left\{1-j\frac{\alpha}{k_0}\left[\frac{|\rho|-l_{dom}/2}
 {(l_{pml}/2 - l_{dom}/2)^2}\right] \right\}
 \end{align}
 $$
 
-with $l_{dom}$ and $l_{pml}$ being the lengths of the domain
+with $\rho$ being a generic coordinate, $\rho^\prime$ being its complex coutnerpart, $l_{dom}$ and $l_{pml}$ being the lengths of the domain
 without and with PML, respectively, and with $\alpha$ being a parameter
 that tunes how fast the absorption is within the PML (the greater the $\alpha$,
 the faster the absorption). In DOLFINx, we can define this
-coordinate transformation in the following way:
+coordinate transformation with the following function:
 
 
 ```python
-def pml_coordinates(x, alpha, k0, l_dom, l_pml):
+def pml_coordinates(rho, alpha, k0, l_dom, l_pml):
 
-    return (x + 1j * alpha / k0 * x
-            * (algebra.Abs(x) - l_dom / 2)
+    return (rho + 1j * alpha / k0 * x
+            * (algebra.Abs(rho) - l_dom / 2)
             / (l_pml / 2 - l_dom / 2)**2)
 ```
 
@@ -263,7 +256,7 @@ $$
 $$
 
 where $x^\prime$ and $y^\prime$ are our complex coordinates
-as defined before.
+as defined by the $\rho^\prime(\rho)$ function.
 
 Now we define some other problem specific parameters:
 
@@ -422,8 +415,6 @@ and $\boldsymbol{\mu}_{pml}$. The here below function
 named `create_eps_mu()` serves this purpose:
 
 ```python
-
-
 def create_eps_mu(pml):
 
     J = grad(pml)
@@ -583,7 +574,7 @@ q_abs_analyt, q_sca_analyt, q_ext_analyt = calculate_analytical_efficiencies(
 ```
 
 Now we can calculate the numerical efficiencies. The full mathematical
-procedure is provided in (cite the first demo)
+procedure is provided in [the first demo of my GSoC journey](https://mikics.github.io/2022/07/19/scattering-boundary-conditions-in-dolfinx.html).
 
 ```python
 # Vacuum impedance
