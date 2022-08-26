@@ -141,7 +141,7 @@ coordinate transformation of this kind:
 
 $$
 \begin{align}
-& \rho^\prime= \rho\left\{1-j\frac{\alpha}{k_0}\left[\frac{|\rho|-l_{dom}/2}
+& \rho^\prime= \rho\left\{1+j\frac{\alpha}{k_0}\left[\frac{|\rho|-l_{dom}/2}
 {(l_{pml}/2 - l_{dom}/2)^2}\right] \right\}
 \end{align}
 $$
@@ -156,7 +156,7 @@ coordinate transformation with the following function:
 ```python
 def pml_coordinates(rho, alpha, k0, l_dom, l_pml):
 
-    return (rho + 1j * alpha / k0 * x
+    return (rho + 1j * alpha / k0 * rho
             * (algebra.Abs(rho) - l_dom / 2)
             / (l_pml / 2 - l_dom / 2)**2)
 ```
@@ -397,9 +397,9 @@ https://www.tandfonline.com/doi/abs/10.1080/09500349608232782):
 
 $$
 \begin{align}
-& {\boldsymbol{\varepsilon}^\prime_{pml}} =
+& {\boldsymbol{\varepsilon}_{pml}} =
 A^{-1} \mathbf{A} {\boldsymbol{\varepsilon}_b}\mathbf{A}^{T},\\
-& {\boldsymbol{\mu}^\prime_{pml}} =
+& {\boldsymbol{\mu}_{pml}} =
 A^{-1} \mathbf{A} {\boldsymbol{\mu}_b}\mathbf{A}^{T},
 \end{align}
 $$
@@ -426,7 +426,7 @@ def create_eps_mu(pml):
 
     A = inv(J)
     eps = det(J) * A * eps_bkg * transpose(A)
-    mu = inv(det(J) * A * 1 * transpose(A))
+    mu = det(J) * A * 1 * transpose(A)
     return eps, mu
 
 
@@ -439,7 +439,7 @@ eps_xy, mu_xy = create_eps_mu(xy_pml)
 The final weak form in the PML region is:
 
 $$
-\int_{\Omega_{pml}}\left[\boldsymbol{\mu}_{pml} \nabla \times \mathbf{E}
+\int_{\Omega_{pml}}\left[\boldsymbol{\mu}^{-1}_{pml} \nabla \times \mathbf{E}
 \right]\cdot \nabla \times \bar{\mathbf{v}}-k_{0}^{2}
 \left[\boldsymbol{\varepsilon}_{pml} \mathbf{E} \right]\cdot
 \bar{\mathbf{v}}~ d x=0,
@@ -467,9 +467,9 @@ Let's solve this equation in DOLFINx:
 F = - inner(curl_2d(Es), curl_2d(v)) * dDom \
     + eps * k0 ** 2 * inner(Es, v) * dDom \
     + k0 ** 2 * (eps - eps_bkg) * inner(Eb, v) * dDom \
-    - inner(mu_x * curl_2d(Es), curl_2d(v)) * dPml_x \
-    - inner(mu_y * curl_2d(Es), curl_2d(v)) * dPml_y \
-    - inner(mu_xy * curl_2d(Es), curl_2d(v)) * dPml_xy \
+    - inner(inv(mu_x) * curl_2d(Es), curl_2d(v)) * dPml_x \
+    - inner(inv(mu_y) * curl_2d(Es), curl_2d(v)) * dPml_y \
+    - inner(inv(mu_xy) * curl_2d(Es), curl_2d(v)) * dPml_xy \
     + k0 ** 2 * inner(eps_x * Es_3d, v_3d) * dPml_x \
     + k0 ** 2 * inner(eps_y * Es_3d, v_3d) * dPml_y \
     + k0 ** 2 * inner(eps_xy * Es_3d, v_3d) * dPml_xy
@@ -653,11 +653,25 @@ if MPI.COMM_WORLD.rank == 0:
     print(f"The analytical extinction efficiency is {q_ext_analyt}")
     print(f"The numerical extinction efficiency is {q_ext_fenics}")
     print(f"The error is {err_ext*100}%")
-```
 
-```python
 # Check if errors are smaller than 1%
 assert err_abs < 0.01
 assert err_sca < 0.01
 assert err_ext < 0.01
+```
+
+The resulting output shows an error below $1\%$:
+
+```shell
+The analytical absorption efficiency is 0.9089500187622276
+The numerical absorption efficiency is 0.9075812357232064
+The error is 0.150589472552646%
+
+The analytical scattering efficiency is 0.8018061316558375
+The numerical scattering efficiency is 0.7996621815338294
+The error is 0.2673900881227399%
+
+The analytical extinction efficiency is 1.710756150418065
+The numerical extinction efficiency is 1.7072434172570357
+The error is 0.20533219536700073%
 ```
